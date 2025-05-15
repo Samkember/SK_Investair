@@ -6,11 +6,32 @@ import pandas as pd
 from datetime import datetime
 
 class S3Manager():
-    def __init__(self):
-        self.s3 =  boto3.client(
-            's3',
+    def __init__(self, aws_profile: str = None, region: str = "ap-southeast-2"):
+        """
+        If aws_profile is set, boto3 will load credentials from ~/.aws/credentials[aws_profile].
+        Otherwise it falls back to env vars AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY,
+        then to IAM role (if on EC2/Lambda/ECS), etc.
+        """
+        if aws_profile:
+            session = boto3.Session(profile_name=aws_profile, region_name=region)
+            self.s3 = session.client("s3")
+        else:
+            # these must be set in your shell / CI environment:
+            aws_key    = os.getenv("AWS_ACCESS_KEY_ID")
+            aws_secret = os.getenv("AWS_SECRET_ACCESS_KEY")
+            if not aws_key or not aws_secret:
+                raise RuntimeError(
+                    "AWS credentials not found in environment. "
+                    "Set AWS_ACCESS_KEY_ID & AWS_SECRET_ACCESS_KEY, "
+                    "or pass aws_profile to __init__."
+                )
+            self.s3 = boto3.client(
+                "s3",
+                aws_access_key_id=aws_key,
+                aws_secret_access_key=aws_secret,
+                region_name=region
+            )
 
-        ) 
 
 
     def Create_Bucket(self, bucket_name, region = 'ap-southeast-2'):
