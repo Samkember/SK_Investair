@@ -9,11 +9,11 @@ import logging
 import re
 
 import csv
-
+ 
 
 from datetime import datetime
 
-from s3_manager import S3Manager
+from s3_manager import S3Manager 
 
 from sqlalchemy import create_engine, MetaData, Table, Column, String, Date, text
 import pymysql
