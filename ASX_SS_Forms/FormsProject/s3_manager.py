@@ -5,6 +5,7 @@ import awswrangler as wr
 import pandas as pd
 from datetime import datetime
 
+
 class S3Manager():
     def __init__(self, aws_profile: str = None, region: str = "ap-southeast-2"):
         """
