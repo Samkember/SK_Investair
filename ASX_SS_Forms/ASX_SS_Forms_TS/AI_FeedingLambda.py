@@ -110,7 +110,6 @@ def process_files(df, prompts, bucket, sql_columns):
         Date = row.get("Date")
         
         Key = Folder + "/" + Filename + ".pdf"
-        print(Key)
 
         
 
@@ -128,7 +127,6 @@ def process_files(df, prompts, bucket, sql_columns):
             "columns": sql_columns,
         }
 
-        print(data_json)
 
 def run_combined_pipeline():
     df = get_tickers_by_sector("Capital Goods")
@@ -143,7 +141,6 @@ def run_combined_pipeline():
     
     split = spilt_filename(matched)
     
-    print(split)
     
     prompts_lookup = {
         "02001": ["Substantial Holder name", "Number of Securities", "Voting Power"],

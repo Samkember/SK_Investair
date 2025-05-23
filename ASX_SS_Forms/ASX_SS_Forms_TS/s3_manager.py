@@ -145,31 +145,57 @@ class S3Manager():
                 raise
             return False 
 
-
-    def download_file(self, object_name, bucket_name, file_name = None):
-        """Download a file from a bucket with or without naming"""
-
+    def download_file(self, object_name, bucket_name, file_name=None):
+        """Download a file from an S3 bucket to a local path."""
         try:
-            if object_name in self.list_s3_objects(bucket_name):
-                
-                print('Downloading object ...')
-                if file_name == None: file_name =object_name
-                self.s3.download_file(bucket_name, object_name, file_name)
-                print(f"{file_name} is doswnloaded")
+            # Check if the object exists (efficient way)
+            self.s3.head_object(Bucket=bucket_name, Key=object_name)
 
-            else: print("No such file!")
-            
+            # Default local filename if not provided
+            if file_name is None:
+                file_name = os.path.basename(object_name)
+
+            # Ensure local directory exists
+            os.makedirs(os.path.dirname(file_name), exist_ok=True)
+
+            # Download
+            self.s3.download_file(Bucket=bucket_name, Key=object_name, Filename=file_name)
+            print(f"[✓] Downloaded '{object_name}' to '{file_name}'")
+
         except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == "AccessDenied":
-                print("Error: Access denied!!")
-            elif e.response['Error']['Code'] == "InvalidBucketName":
-                print("Error: Invalid Bucket name!!")
-            elif e.response['Error']['Code'] == "NoSuchBucket":
-                print("Error: Bucket does not exist!!")
-            elif e.response['Error']['Code'] == "AllAccessDisabled":
-                print("Error: You do not have access to the Bucket!!")
+            error_code = e.response['Error']['Code']
+            if error_code == "404":
+                print(f"[✗] Object '{object_name}' not found in bucket '{bucket_name}'")
+            elif error_code == "403":
+                print(f"[✗] Access denied for bucket '{bucket_name}' or object '{object_name}'")
+            elif error_code == "NoSuchBucket":
+                print(f"[✗] Bucket '{bucket_name}' does not exist")
             else:
-                print(e)
+                print(f"[✗] Unexpected error: {e}")
+    # def download_file(self, object_name, bucket_name, file_name = None):
+    #     """Download a file from a bucket with or without naming"""
+
+    #     try:
+    #         if object_name in self.list_s3_objects(bucket_name):
+                
+    #             print('Downloading object ...')
+    #             if file_name == None: file_name =object_name
+    #             self.s3.download_file(bucket_name, object_name, file_name)
+    #             print(f"{file_name} is downloaded")
+
+    #         else: print("No such file!")
+            
+    #     except botocore.exceptions.ClientError as e:
+    #         if e.response['Error']['Code'] == "AccessDenied":
+    #             print("Error: Access denied!!")
+    #         elif e.response['Error']['Code'] == "InvalidBucketName":
+    #             print("Error: Invalid Bucket name!!")
+    #         elif e.response['Error']['Code'] == "NoSuchBucket":
+    #             print("Error: Bucket does not exist!!")
+    #         elif e.response['Error']['Code'] == "AllAccessDisabled":
+    #             print("Error: You do not have access to the Bucket!!")
+    #         else:
+    #             print(e)
 
 
     def write_parquet(self, dataframe, key, timestamp = False, bucket_name = None):
