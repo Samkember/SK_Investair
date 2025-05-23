@@ -23,5 +23,5 @@ def fetch_document(file_code: str):
     print(f"File downloaded successfully to {download_path}")
 
 if __name__ == "__main__":
-    file_code = "2024100102860486"
+    file_code = "2024100302862070"
     fetch_document(file_code)
