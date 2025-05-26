@@ -13,13 +13,14 @@ outputFolderPath = r"C:\Users\HarryBox\Documents\SK_Investair\ASX_SS_Forms\ASX_S
 CHECKPOINT_FILE = os.path.join(outputFolderPath, "txt_file_classification_all_S3_History_Checkpoint.txt")
 BATCH_SIZE = 10
 TABLE_NAME = "ASX_Annoucement_HeaderFiles"
+SCHEMA_NAME = "Substantial_Holding"
 
 # === DATABASE CONNECTION ===
 def get_mysql_engine(mysql_url=None):
     if mysql_url is None:
         mysql_url = (
             "mysql+pymysql://sam:sam2025@"
-            "database-1.cmy0wo2batmu.ap-southeast-2.rds.amazonaws.com:3306/Substantial_Holding"
+            "database-1.cmy0wo2batmu.ap-southeast-2.rds.amazonaws.com:3306/{schema_name}".format(schema_name=SCHEMA_NAME)
         )
     return create_engine(mysql_url)
 
@@ -45,10 +46,10 @@ def file_already_processed(conn, file_id):
     return result.scalar() is not None
 
 # === PARSE HEADER ===
-def parse_txt_header(fields, filename):
+def parse_txt_header(fields, file_id):
     rep_types = [f.strip() for f in fields[7:27] if f.strip()]
     return {
-        "filename": filename,
+        "filename": file_id,
         "announcement_number": fields[32] if len(fields) > 32 else None,
         "asx_code": fields[33] if len(fields) > 33 else None,
         "exchange": fields[34] if len(fields) > 34 else None,
@@ -66,12 +67,11 @@ def parse_txt_header(fields, filename):
 # === FORMAT CHECK ===
 def is_valid_format(fields):
     try:
-        # Must have at least 37 fields, and specific indexes should be parseable
         if len(fields) < 37:
             return False
-        int(fields[0])  # n_pages
-        fields[4] and fields[5] and fields[6]  # rec_type, rec_date, rec_time
-        fields[32] and fields[33]  # announcement_number, asx_code
+        int(fields[0])
+        fields[4] and fields[5] and fields[6]
+        fields[32] and fields[33]
         return True
     except Exception:
         return False
@@ -98,7 +98,7 @@ def process_folders():
             with engine.begin() as conn:
                 for file in txt_files:
                     raw_filename = os.path.basename(file).replace(".txt", "")
-                    file_id = prefix.replace("/", "") + raw_filename  # 16-char format: YYYYMMDDXXXXXXXX
+                    file_id = prefix[:8] + raw_filename  # e.g., '20240305' + '02781371'
 
                     if file_already_processed(conn, file_id):
                         continue
@@ -131,13 +131,11 @@ def process_folders():
             print(f"❌ Error processing folder {prefix}: {e}")
             break
 
-    # Final flush
     if batch:
         df = pd.DataFrame(batch)
         insert_into_sql(df, engine)
         print(f"✅ Final insert of {len(batch)} records")
 
-    # Save failed files
     if failed_files:
         failed_df = pd.DataFrame({"failed_files": failed_files})
         failed_df.to_csv(os.path.join(outputFolderPath, "failed_files.csv"), index=False)

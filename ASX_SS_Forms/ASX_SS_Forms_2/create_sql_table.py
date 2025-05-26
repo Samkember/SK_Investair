@@ -1,4 +1,8 @@
 from sqlalchemy import create_engine, text
+import os, sys
+import pandas as pd
+
+outputFolderPath = r"C:\Users\HarryBox\Documents\SK_Investair\ASX_SS_Forms\ASX_SS_Forms_2\Output"
 
 # === MySQL connection ===
 def get_mysql_engine():
@@ -41,8 +45,25 @@ def drop_table():
         conn.execute(text(drop_sql))
     print("✅ Table 'asx_announcements' dropped successfully (if it existed).")
 
+def export_sql_to_csv():
+    engine = get_mysql_engine()
+    df = pd.read_sql(f"SELECT * FROM {TABLE_NAME}", engine)
+    csv_path = os.path.join(outputFolderPath, f"{TABLE_NAME}_export.csv")
+    df.to_csv(csv_path, index=False)
+    print(f"✅ Exported table to {csv_path}")
+
+
 
 # === Entry point ===
 if __name__ == "__main__":
-    create_table()
+    # === Configurable schema and table name ===
+    schema_name = "Substantial_Holding"
+    table_name = "ASX_Annoucement_HeaderFiles"
+
+    # Apply to global table usage
+    TABLE_NAME = table_name
+
+    # Call the function you want here
+    # create_table()
     # drop_table()
+    # export_sql_to_csv()
