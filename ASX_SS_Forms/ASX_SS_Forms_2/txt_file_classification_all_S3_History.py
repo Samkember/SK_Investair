@@ -9,10 +9,10 @@ from datetime import datetime
 BUCKET = "xtf-asx"
 START_DATE = "20240301"
 END_DATE = "20250523"
-CHECKPOINT_FILE = "checkpoint.txt"
+outputFolderPath = r"C:\Users\HarryBox\Documents\SK_Investair\ASX_SS_Forms\ASX_SS_Forms_2\Output"
+CHECKPOINT_FILE = os.path.join(outputFolderPath, "txt_file_classification_all_S3_History_Checkpoint.txt")
 BATCH_SIZE = 10
 TABLE_NAME = "ASX_Annoucement_HeaderFiles"
-outputFolderPath = r"C:\Users\HarryBox\Documents\SK_Investair\ASX_SS_Forms\ASX_SS_Forms_2\Output"
 
 # === DATABASE CONNECTION ===
 def get_mysql_engine(mysql_url=None):
@@ -37,7 +37,7 @@ def write_checkpoint(date_str):
 # === SQL INSERT ===
 def insert_into_sql(df, engine):
     with engine.begin() as conn:
-        df.to_sql(TABLE_NAME, con=conn, if_exists='append', index=False)
+        df.to_sql(TABLE_NAME, con=conn, if_exists='append', index=False, method='multi')
 
 # === FILE EXISTS CHECK ===
 def file_already_processed(conn, file_id):
@@ -97,7 +97,9 @@ def process_folders():
 
             with engine.begin() as conn:
                 for file in txt_files:
-                    file_id = prefix + os.path.basename(file)
+                    raw_filename = os.path.basename(file).replace(".txt", "")
+                    file_id = prefix.replace("/", "") + raw_filename  # 16-char format: YYYYMMDDXXXXXXXX
+
                     if file_already_processed(conn, file_id):
                         continue
 
