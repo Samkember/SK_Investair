@@ -221,18 +221,18 @@ def run_combined_pipeline():
         print(f"❌ Failed to upload to SQL: {e}")
 
 
-# === LAMBDA ENTRY POINT ===
-if __name__ == "__main__":
-    start_time = time.time()
-    run_combined_pipeline()
-    end_time = time.time()
-    print(f"Pipeline completed in {end_time - start_time:.2f} seconds.")
+# # === LAMBDA ENTRY POINT ===
+# if __name__ == "__main__":
+#     start_time = time.time()
+#     run_combined_pipeline()
+#     end_time = time.time()
+#     print(f"Pipeline completed in {end_time - start_time:.2f} seconds.")
 
 # === LAMBDA HANDLER ===
 
-# def lambda_handler(event=None, context=None):
-#     run_combined_pipeline()
-#     return {
-#         "statusCode": 200,
-#         "body": "ASX data pipeline completed successfully."
-#     }
+def lambda_handler(event=None, context=None):
+    run_combined_pipeline()
+    return {
+        "statusCode": 200,
+        "body": "ASX data pipeline completed successfully."
+    }
