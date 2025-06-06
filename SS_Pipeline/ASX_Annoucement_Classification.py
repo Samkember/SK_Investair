@@ -98,6 +98,6 @@ def run_combined_pipeline():
 #     }
 
 
-if __name__ == "__main__";
+if __name__ == "__main__":
     run_combined_pipeline()
     print("ASX data pipeline completed successfully.")

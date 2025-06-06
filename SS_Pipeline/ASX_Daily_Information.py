@@ -233,7 +233,7 @@ def run_combined_pipeline():
     except Exception as e:
         print(f"❌ Failed to upload to SQL: {e}")
 
-if __name__ == "__main__";
+if __name__ == "__main__":
     run_combined_pipeline()
     print("ASX data pipeline completed successfully.")
 
