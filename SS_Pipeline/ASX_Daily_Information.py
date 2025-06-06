@@ -17,12 +17,20 @@ NUM_THREADS_MARKETINDEX = 10
 DATE_USED = datetime.now(timezone(timedelta(hours=10))).date()
 SCHEMA_NAME = "ASX_Market"
 TICKER_TABLE = "ASX_Company_Codes"
-DATA_TABLE = "ASX_Data"
+DATA_TABLE = "ASX_DailyMarketInformation"
 
 # === GLOBALS ===
 print_lock = threading.Lock()
 result_lock = threading.Lock()
 session = cloudscraper.create_scraper()
+
+# === COLUMN FIX ===
+def standardize_column_names(df):
+    rename_map = {
+        "company": "company_name",
+        "change_pct": "pct_change"
+    }
+    return df.rename(columns=rename_map)
 
 # === FETCH HISTORICAL RETURNS ===
 def fetch_Historical_Returns(ticker: str, app_id: str = APP_ID):
@@ -56,7 +64,6 @@ def fetch_Historical_Returns(ticker: str, app_id: str = APP_ID):
             df.set_index("Date", inplace=True)
             df.sort_index(inplace=True)
             df = df[df["Price"].notnull()]
-
             if df.empty:
                 continue
 
@@ -64,12 +71,12 @@ def fetch_Historical_Returns(ticker: str, app_id: str = APP_ID):
             today = df.index[-1].replace(hour=0, minute=0, second=0, microsecond=0)
 
             offsets = {
-                "1 Month Return (%)": today - relativedelta(months=1),
-                "3 Month Return (%)": today - relativedelta(months=3),
-                "6 Month Return (%)": today - relativedelta(months=6),
-                "12 Month Return (%)": today - relativedelta(months=12),
-                "3 Year Return (%)": today - relativedelta(years=3),
-                "5 Year Return (%)": today - relativedelta(years=5),
+                "return_1m": today - relativedelta(months=1),
+                "return_3m": today - relativedelta(months=3),
+                "return_6m": today - relativedelta(months=6),
+                "return_12m": today - relativedelta(months=12),
+                "return_3y": today - relativedelta(years=3),
+                "return_5y": today - relativedelta(years=5),
             }
 
             returns = {}
@@ -87,8 +94,8 @@ def fetch_Historical_Returns(ticker: str, app_id: str = APP_ID):
         except Exception:
             continue
 
-    return {label: None for label in offsets.keys()}
-
+    return {label: None for label in [
+        "return_1m", "return_3m", "return_6m", "return_12m", "return_3y", "return_5y"]}
 
 # === FETCH MARKETINDEX SNAPSHOT ===
 def fetch_marketindex_data(ticker):
@@ -123,21 +130,20 @@ def fetch_marketindex_data(ticker):
         returns = fetch_Historical_Returns(ticker)
 
         return {
-            "Info Date": DATE_USED,
-            "Ticker": ticker.upper(),
-            "Company": desc.get("issuerName", "Unknown"),
-            "Sector": desc.get("industryGroup", "Unknown"),
-            "Market Cap": market_cap,
-            "Shares Outstanding": shares_issued,
-            "Open": open_price,
-            "Close": close_price,
-            "Volume": volume,
-            "Change (%)": pct_change,
+            "info_date": DATE_USED,
+            "ticker": ticker.upper(),
+            "company": desc.get("issuerName", "Unknown"),
+            "sector": desc.get("industryGroup", "Unknown"),
+            "market_cap": market_cap,
+            "shares_outstanding": shares_issued,
+            "open_price": open_price,
+            "close_price": close_price,
+            "volume": volume,
+            "change_pct": pct_change,
             **returns
         }
     except Exception:
         return None
-
 
 # === MAIN PIPELINE ===
 def run_combined_pipeline():
@@ -175,8 +181,11 @@ def run_combined_pipeline():
             executor.map(process_marketindex, retry_list)
 
     df_combined = pd.DataFrame(marketindex_results)
-    df_combined["Info Date"] = pd.to_datetime(df_combined["Info Date"]).dt.date
-    upload_date = df_combined["Info Date"].iloc[0]
+    df_combined["info_date"] = pd.to_datetime(df_combined["info_date"]).dt.date
+    df_combined = standardize_column_names(df_combined)
+    upload_date = df_combined["info_date"].iloc[0]
+
+    print(f"📦 Preparing to upload {len(df_combined)} rows for {upload_date}")
 
     try:
         meta = MetaData()
@@ -184,28 +193,32 @@ def run_combined_pipeline():
             if not engine.dialect.has_table(conn, DATA_TABLE, schema=SCHEMA_NAME):
                 asx_table = Table(
                     DATA_TABLE, meta,
-                    Column('Info Date', Date),
-                    Column('Ticker', String(10)),
-                    Column('Company', String(255)),
-                    Column('Sector', String(100)),
-                    Column('Market Cap', Float),
-                    Column('Shares Outstanding', Float),
-                    Column('Open', Float),
-                    Column('Close', Float),
-                    Column('Volume', Float),
-                    Column('Change (%)', Float),
-                    Column('1 Month Return (%)', Float),
-                    Column('3 Month Return (%)', Float),
-                    Column('6 Month Return (%)', Float),
-                    Column('12 Month Return (%)', Float),
-                    Column('3 Year Return (%)', Float),
-                    Column('5 Year Return (%)', Float),
+                    Column('info_date', Date),
+                    Column('ticker', String(10)),
+                    Column('company_name', String(255)),
+                    Column('sector', String(100)),
+                    Column('market_cap', Float),
+                    Column('shares_outstanding', Float),
+                    Column('open_price', Float),
+                    Column('close_price', Float),
+                    Column('volume', Float),
+                    Column('pct_change', Float),
+                    Column('return_1m', Float),
+                    Column('return_3m', Float),
+                    Column('return_6m', Float),
+                    Column('return_12m', Float),
+                    Column('return_3y', Float),
+                    Column('return_5y', Float),
                     schema=SCHEMA_NAME
                 )
                 meta.create_all(engine)
                 print(f"📋 SQL table '{DATA_TABLE}' created in schema {SCHEMA_NAME}.")
 
-            conn.execute(text(f"DELETE FROM {SCHEMA_NAME}.{DATA_TABLE} WHERE DATE(`Info Date`) = :upload_date"), {"upload_date": upload_date})
+            conn.execute(
+                text(f"DELETE FROM {SCHEMA_NAME}.{DATA_TABLE} WHERE info_date = :upload_date"),
+                {"upload_date": upload_date}
+            )
+            print(f"🗑️ Deleted rows for date {upload_date}")
 
         with engine.begin() as conn:
             df_combined.to_sql(
@@ -221,18 +234,19 @@ def run_combined_pipeline():
         print(f"❌ Failed to upload to SQL: {e}")
 
 
-# # === LAMBDA ENTRY POINT ===
-# if __name__ == "__main__":
-#     start_time = time.time()
-#     run_combined_pipeline()
-#     end_time = time.time()
-#     print(f"Pipeline completed in {end_time - start_time:.2f} seconds.")
+# === ENTRY POINT ===
+if __name__ == "__main__":
+    start_time = time.time()
+    run_combined_pipeline()
+
+
+
 
 # === LAMBDA HANDLER ===
 
-def lambda_handler(event=None, context=None):
-    run_combined_pipeline()
-    return {
-        "statusCode": 200,
-        "body": "ASX data pipeline completed successfully."
-    }
+# def lambda_handler(event=None, context=None):
+#     run_combined_pipeline()
+#     return {
+#         "statusCode": 200,
+#         "body": "ASX data pipeline completed successfully."
+#     }
