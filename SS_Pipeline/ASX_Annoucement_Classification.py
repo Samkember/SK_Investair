@@ -1,121 +1,103 @@
-import os, sys
-import pandas as pd 
-import sqlalchemy
-from sqlalchemy import create_engine, text
+import pandas as pd
+from sqlalchemy import create_engine, MetaData, Table, Column, String, Date, text
 from datetime import datetime
-from datetime import timezone, timedelta
-from dateutil.relativedelta import relativedelta
 
-# === CONFIG ===
-BUCKET = "xtf-asx"
-RUN_DATE = datetime.now(timezone(timedelta(hours=10))).date() - relativedelta(days=1)
-TABLE_NAME = "ASX_Annoucement_HeaderFiles"
-SCHEMA_NAME = "Substantial_Holding"
+# === CONFIGURATION ===
+SCHEMA_NAME = "ASX_Market"
+TABLE_NAME = "ASX_Company_Codes"
+ASX_CSV_URL = "https://www.asx.com.au/asx/research/ASXListedCompanies.csv"
 
-# === DATABASE CONNECTION ===
-def get_mysql_engine(mysql_url=None):
-    if mysql_url is None:
-        mysql_url = (
-            "mysql+pymysql://sam:sam2025@"
-            "database-1.cmy0wo2batmu.ap-southeast-2.rds.amazonaws.com:3306/{schema_name}".format(schema_name=SCHEMA_NAME)
+
+# === Load and Filter ASX Company Data ===
+def get_tickers_by_sector(sectors=None):
+    # print("📥 Downloading ASX listed companies CSV...")
+    try:
+        df = pd.read_csv(ASX_CSV_URL, skiprows=1)
+    except Exception as e:
+        raise RuntimeError(f"❌ Failed to load ASX CSV: {e}")
+
+    # Identify the correct sector column
+    possible_sector_cols = ["Industry Group", "GICS industry group", "Industry", "GICS Sector"]
+    sector_col = next((c for c in df.columns if c in possible_sector_cols), None)
+    if not sector_col:
+        raise ValueError("❌ No known sector column found in ASX CSV.")
+
+    # print(f"📊 Using sector column: {sector_col}")
+
+    # Clean and standardize data
+    df["Sector"] = df[sector_col].astype(str).str.strip()
+    df["Ticker"] = df["ASX code"].astype(str).str.upper().str.strip()
+    df["CompanyName"] = df["Company name"].astype(str).str.strip()
+    df["UploadDate"] = pd.to_datetime(datetime.now().date())
+
+    # Filter by sector if specified
+    if sectors is None or (isinstance(sectors, str) and sectors.lower() == "all"):
+        mask = pd.Series(True, index=df.index)
+    else:
+        wanted = {sectors} if isinstance(sectors, str) else set(sectors)
+        mask = df["Sector"].isin(wanted)
+
+    filtered_df = df.loc[mask, ["Ticker", "CompanyName", "Sector", "UploadDate"]].reset_index(drop=True)
+    # print(f"✅ Retrieved {len(filtered_df)} companies")
+    return filtered_df
+
+
+# === Upload to MySQL Database ===
+def SQL_upload(df):
+    # print("🔌 Connecting to MySQL...")
+    try:
+        engine = create_engine(
+            f'mysql+pymysql://sam:sam2025@database-1.cmy0wo2batmu.ap-southeast-2.rds.amazonaws.com:3306/{SCHEMA_NAME}'
         )
-    return create_engine(mysql_url)
-
-# === SQL INSERT ===
-def insert_into_sql(df, engine):
-    with engine.begin() as conn:
-        df.to_sql(TABLE_NAME, con=conn, if_exists='append', index=False, method='multi')
-
-# === FILE EXISTS CHECK ===
-def file_already_processed(conn, file_id):
-    result = conn.execute(text(f"SELECT 1 FROM {TABLE_NAME} WHERE filename = :f"), {"f": file_id})
-    return result.scalar() is not None
-
-# === PARSE HEADER ===
-def parse_txt_header(fields, file_id):
-    rep_types = [f.strip() for f in fields[7:27] if f.strip()]
-    return {
-        "filename": file_id,
-        "announcement_number": fields[32] if len(fields) > 32 else None,
-        "asx_code": fields[33] if len(fields) > 33 else None,
-        "exchange": fields[34] if len(fields) > 34 else None,
-        "sensitive": fields[35] if len(fields) > 35 else None,
-        "headline": fields[36] if len(fields) > 36 else None,
-        "rec_type": fields[4] if len(fields) > 4 else None,
-        "rec_date": fields[5] if len(fields) > 5 else None,
-        "rec_time": fields[6] if len(fields) > 6 else None,
-        "rel_date": fields[27] if len(fields) > 27 else None,
-        "rel_time": fields[28] if len(fields) > 28 else None,
-        "n_pages": int(fields[0]) if fields[0].isdigit() else None,
-        "rep_types": str(rep_types)
-    }
-
-# === FORMAT CHECK ===
-def is_valid_format(fields):
-    try:
-        if len(fields) < 37:
-            return False
-        int(fields[0])
-        fields[4] and fields[5] and fields[6]
-        fields[32] and fields[33]
-        return True
-    except Exception:
-        return False
-
-# === MAIN PROCESS ===
-def process_folders():
-    s3 = boto3.client('s3')
-    engine = get_mysql_engine()
-
-    prefix = RUN_DATE.strftime("%Y%m%d") + "/"
-
-    information = []
-
-    print(f"\n📦 Processing folder: {prefix}")
-
-    try:
-        txt_files = s3.list_files(bucket_name=BUCKET, folder=prefix)
-        txt_files = [f for f in txt_files if f.endswith(".txt")]
+        meta = MetaData()
 
         with engine.begin() as conn:
-            for file in txt_files:
-                raw_filename = os.path.basename(file).replace(".txt", "")
-                file_id = prefix[:8] + raw_filename  # e.g., '20240305' + '02781371'
+            if not engine.dialect.has_table(conn, TABLE_NAME, schema=SCHEMA_NAME):
+                print(f"📦 Table '{TABLE_NAME}' not found. Creating...")
+                asx_codes_table = Table(
+                    TABLE_NAME, meta,
+                    Column('Ticker', String(10), primary_key=True),
+                    Column('CompanyName', String(255)),
+                    Column('Sector', String(100)),
+                    Column('UploadDate', Date),
+                    schema=SCHEMA_NAME
+                )
+                meta.create_all(engine)
+                print(f"✅ Table '{TABLE_NAME}' created.")
 
-                if file_already_processed(conn, file_id):
-                    continue
+            # print(f"🧹 Clearing existing data in {SCHEMA_NAME}.{TABLE_NAME}...")
+            conn.execute(text(f"DELETE FROM {SCHEMA_NAME}.{TABLE_NAME}"))
 
-                try:
-                    raw_output = s3.get_file_bytes(bucket_name=BUCKET, key=file)
-                    decoded = raw_output.decode('utf-8')
-                    fields = decoded.splitlines()
-
-                    if not is_valid_format(fields):
-                        print(f"⚠️ Invalid format or malformed file: {file_id}")
-
-                    record = parse_txt_header(fields, file_id)
-                    information.append(record)
-
-                except Exception as fe:
-                    print(f"❌ Failed to process file: {file_id} — {fe}")
+        with engine.begin() as conn:
+            df.to_sql(
+                name=TABLE_NAME,
+                con=conn,
+                if_exists='append',
+                index=False,
+                schema=SCHEMA_NAME
+            )
+            print(f"✅ Uploaded {len(df)} records to {SCHEMA_NAME}.{TABLE_NAME}")
 
     except Exception as e:
-        print(f"❌ Error processing folder {prefix}: {e}")
-        break
+        raise RuntimeError(f"❌ Database operation failed: {e}")
 
 
-    df = pd.DataFrame(information)
-    insert_into_sql(df, engine)
-    print(f"✅ Inserted {len(information)} records")
+# === Main Pipeline Runner ===
+def run_combined_pipeline():
+    # print("🚀 Starting ASX company upload pipeline...")
+    df = get_tickers_by_sector("all")
+    SQL_upload(df)
+    # print("🏁 Pipeline completed.")
 
 
-# === Run ===
-if __name__ == "__main__":
-    process_folders()
-
-# def lambda_handler(event=None, context=None):
-#     process_folders()
+# def lambda_handler(event, context):
+#     run_combined_pipeline()
 #     return {
-#         "statusCode": 200,
-#         "body": "ASX Annoucement Classification has been successfully run"
+#         'statusCode': 200,
+#         "body": "ASX data pipeline completed successfully."
 #     }
+
+
+if __name__ == "__main__";
+    run_combined_pipeline()
+    print("ASX data pipeline completed successfully.")
