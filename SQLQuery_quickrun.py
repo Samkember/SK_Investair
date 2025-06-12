@@ -1,6 +1,14 @@
 import pandas as pd
 from sqlalchemy import create_engine
 
+DB_HOST = "database-1.cmy0wo2batmu.ap-southeast-2.rds.amazonaws.com"
+DB_USER = "sam"
+DB_PASSWORD = "sam2025"
+DB_NAME = "ASX_Market"
+DB_PORT = int(3306)  # Default MySQL port
+DB_CONNECTION_STRING = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+
 # === CONFIG ===
 SCHEMA_NAME = "ASX_Market"
 TABLE_NAME = "ASX_Data"
