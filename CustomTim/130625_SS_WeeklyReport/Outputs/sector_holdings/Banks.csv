@@ -1,0 +1,3 @@
+id,shareholder,ticker,event_date,event_type,prev_voting_power,post_voting_power
+4352,UBS GROUP AG,JDO,2025-05-05,new,4.9,5.27
+4353,UBS GROUP AG,JDO,2025-05-09,change,5.27,6.31

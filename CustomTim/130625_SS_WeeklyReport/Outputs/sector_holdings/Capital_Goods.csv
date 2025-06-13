@@ -1,0 +1,4 @@
+id,shareholder,ticker,event_date,event_type,prev_voting_power,post_voting_power
+5961,STATE STREET CORPORATION,DRO,2025-05-07,cease,4.9,4.9
+9040,SPHERIA ASSET MANAGEMENT,GWA,2025-05-05,change,7.87,6.82
+15463,JPMORGAN CHASE BANK,DRO,2025-05-05,cease,,4.9

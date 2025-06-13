@@ -1,0 +1,3 @@
+id,shareholder,ticker,event_date,event_type,prev_voting_power,post_voting_power
+6953,MITSUBISHI UFJ FINANCIAL GROUP,CNU,2025-05-05,new,5.005,4.9
+6955,MITSUBISHI UFJ FINANCIAL GROUP,CNU,2025-05-07,cease,4.9,4.9
