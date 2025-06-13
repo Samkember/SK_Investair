@@ -28,6 +28,11 @@ def annotate_signal_context(df, signal_rows):
     )
     signal_rows["price_before"] = signal_rows["close_price"].shift(1)
     signal_rows["price_after"] = signal_rows["close_price"].shift(-1)
+
+    # If price_after is NaN or the same as price_before, fill with price_before
+    signal_rows["price_after"] = signal_rows["price_after"].fillna(signal_rows["price_before"])
+    signal_rows.loc[signal_rows["price_after"] == signal_rows["close_price"], "price_after"] = signal_rows["price_before"]
+
     signal_rows["volume_pct_change"] = (
         df["volume"].pct_change().replace([np.inf, -np.inf], np.nan).reindex(signal_rows.index)
     )
