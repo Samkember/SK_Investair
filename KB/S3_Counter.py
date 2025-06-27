@@ -1,28 +1,28 @@
 from s3_manager import S3Manager
 
-# --- Global Config ---
-# BUCKET_NAME = "investair-asx"
-BUCKET_NAME = "xtf-asx"
+# --- Bucket Names ---
+SRC_BUCKET = "xtf-asx"
+DEST_BUCKET = "investair-asx"
 
-def count_pdf_files(bucket_name):
+def count_file_types():
     s3 = S3Manager()
-    all_keys = s3.list_s3_objects(bucket_name)
-    pdf_keys = [key for key in all_keys if key.lower().endswith(".pdf")]
-    
-    print(f"📄 Total PDF files in '{bucket_name}': {len(pdf_keys)}")
 
-    # Extract base filenames (ignore folder structure, remove .pdf, lowercase)
-    base_names = [key.split("/")[-1].replace(".pdf", "").lower() for key in pdf_keys]
-    
-    unique_count = len(set(base_names))
-    total_count = len(base_names)
+    # Get all keys from both buckets
+    investair_keys = s3.list_s3_objects(DEST_BUCKET)
+    xtf_keys = s3.list_s3_objects(SRC_BUCKET)
 
-    if unique_count == total_count:
-        print("✅ All PDF filenames are unique.")
-    else:
-        print(f"⚠️ {total_count - unique_count} duplicate filename(s) detected (ignoring folder structure).")
+    # Count .pdfs in investair-asx
+    investair_pdfs = [k for k in investair_keys if k.lower().endswith(".pdf")]
+    print(f"📦 investair-asx PDF count: {len(investair_pdfs)}")
 
-    return total_count
+    # Count .pdfs in xtf-asx
+    xtf_pdfs = [k for k in xtf_keys if k.lower().endswith(".pdf")]
+    print(f"📦 xtf-asx PDF count: {len(xtf_pdfs)}")
+
+    # Count .txts in xtf-asx
+    xtf_txts = [k for k in xtf_keys if k.lower().endswith(".txt")]
+    print(f"📄 xtf-asx TXT count: {len(xtf_txts)}")
 
 if __name__ == "__main__":
-    count_pdf_files(BUCKET_NAME)
+    count_file_types()
+
